@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use('Qt4Agg')
 
 import numpy as np
+import cv2
 from matplotlib.lines import Line2D
 from matplotlib.artist import Artist
 from matplotlib.mlab import dist_point_to_segment
@@ -104,11 +105,44 @@ class PolygonInteractor(object):
 
         def print_pts(pts):
             s = "["
+            pts2 = []
             for i in range(4):
                 s += "({:d}, {:d}), ".format(int(pts[i][0]), int(pts[i][1]))
+                pts2.append((int(pts[i][0]), int(pts[i][1])))
             s = s[:-2] + "]"
             print(s)
-        print_pts(self.poly.xy)
+            return tuple(pts2)
+
+        def CalcDstCoords(botL, topL, topR, botR):
+            d_botL = (botL[0], 700)
+            d_botR = (botR[0], 700)
+            d_topL = (d_botL[0], 50)
+            d_topR = (d_botR[0], 50)
+            return d_botL, d_topL, d_topR, d_botR
+
+        def transformImage(img, matrix):
+            return cv2.warpPerspective(img, matrix, (img.shape[:2])[::-1], flags=cv2.INTER_LINEAR)
+
+        def polylines(im, pts, color=[0, 200, 0], thickness=5, isClosed=True):
+            return cv2.polylines(im, pts=np.array([pts], dtype=np.int32), isClosed=isClosed, color=color, thickness=thickness)
+
+        def rect(im, topLeft, sizeWH, color=[0, 200, 0], thickness=5):
+            x, y = topLeft
+            w, h = sizeWH
+            pts = np.array([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], dtype=np.int)
+            return polylines(im, pts, color=color, thickness=thickness, isClosed=True)
+
+        def project(pts):
+            src = np.array(pts)
+            dst = np.array(CalcDstCoords(*src))
+            matrix = cv2.getPerspectiveTransform(src.astype(np.float32), dst.astype(np.float32))
+            imgNew = transformImage(IMG, matrix)
+            rect(imgNew, dst[1], ((dst[2][0] - dst[1][0]),(dst[2][1] - dst[1][1])))
+            ax2.imshow(imgNew)
+            fig2.canvas.draw()
+
+        newPts = print_pts(self.poly.xy)
+        project(newPts)
 
         if not event.inaxes:
             return
@@ -172,23 +206,30 @@ import cv2
 import numpy as np
 
 
+IMG = imageio.imread('test_images/straight_lines4.jpg')
+fig, ax = plt.subplots()
+fig2, ax2 = plt.subplots()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from matplotlib.patches import Polygon
 
     # vid = imageio.get_reader('project_video.mp4')
-
-    xs = [295, 628, 647, 1098]
-    ys = [680, 430, 432, 670]
+    # [(205, 671), (606, 439), (672, 438), (1109, 662)]
+    # [(284, 654), (616, 441), (690, 442), (1041, 651)]
+    # [[284, 654], [619, 437], [685, 437], [1041, 651]]
+    xys = np.array([(284, 654), (616, 441), (690, 442), (1041, 651)], dtype=np.int)
+    xs = xys[:,0]
+    ys = xys[:,1]
 
     poly = Polygon(list(zip(xs, ys)), animated=True)
 
-    fig, ax = plt.subplots()
     ax.add_patch(poly)
     p = PolygonInteractor(ax, poly)
 
-    ax.imshow(imageio.imread('test_images/test2.jpg'))
+    ax.imshow(IMG)
+
+    ax2.imshow(IMG)
     plt.show()
     # for i in range(340, 380, 10):
     #     ax.imshow(vid.get_data(i))
